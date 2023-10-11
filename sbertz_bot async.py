@@ -70,7 +70,6 @@ async def scrape_data(session,url):
     # парсинг информации по спаршенным адресам
 
 async def scrap_scrap(session,data_list):
-
     for page in data_list:
         urla = page['URL']
         async with session.get(urla) as response:
@@ -109,15 +108,16 @@ async def database(data_list):
 
     # Создание таблицы если отсутствует
     table_name = "tz"
+    
     create_table_query = sql.SQL("""
         CREATE TABLE IF NOT EXISTS {} (
-            ID SERIAL PRIMARY KEY,
+            ID INT PRIMARY KEY DEFAULT {},
             URL VARCHAR(200) UNIQUE,
             TITLE VARCHAR(200),
             CONTENT TEXT,
             CREATED_AT TIMESTAMP
         )
-    """).format(sql.Identifier(table_name))
+    """).format(sql.Identifier(table_name), sql.Literal(0))
 
     cur.execute(create_table_query)
 
@@ -136,13 +136,22 @@ async def database(data_list):
         content = page['Content']
         timestamp = page['TimeStamp']
 
+        get_max_id_query = sql.SQL("SELECT MAX(ID) FROM {};").format(sql.Identifier(table_name))
+        cur.execute(get_max_id_query)
+        max_id = cur.fetchone()[0]
+
+        if max_id is not None:
+            id_for_new_row = max_id + 1
+        else:
+            id_for_new_row = 1
+
         insert_query = sql.SQL("""
-            INSERT INTO {} (URL, TITLE, CONTENT, CREATED_AT)
-            VALUES (%s, %s, %s, %s)
+            INSERT INTO {} (ID, URL, TITLE, CONTENT, CREATED_AT)
+            VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (URL) DO NOTHING;
         """).format(sql.Identifier(table_name))
 
-        cur.execute(insert_query, (urla, title, content, timestamp))
+        cur.execute(insert_query, (id_for_new_row, urla, title, content, timestamp))
         conn.commit()
 
     count_after_parsing_query = sql.SQL("""SELECT COUNT(*) FROM {}
