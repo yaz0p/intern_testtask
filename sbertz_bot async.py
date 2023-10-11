@@ -23,10 +23,9 @@ base_url = "https://www.vedomosti.ru"
 
 data_list = []
 
-async def scrape_data(url):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            html = await response.text()
+async def scrape_data(session,url):
+    async with session.get(url) as response:
+        html = await response.text()
 
     soup = BeautifulSoup(html, "lxml")
 
@@ -70,30 +69,30 @@ async def scrape_data(url):
 
     # парсинг информации по спаршенным адресам
 
-async def scrap_scrap(data_list):
-    async with aiohttp.ClientSession() as session:
-        for page in data_list:
-            urla = page['URL']
-            async with session.get(urla) as response:
-                html = await response.text()
-            page_soup = BeautifulSoup(html, 'lxml')
+async def scrap_scrap(session,data_list):
 
-            for element in page_soup.find_all('div', class_='box-paywall'):
-                element.decompose()
-            
-            content_element = page_soup.find("div", class_="article-boxes-list article__boxes")
-            if content_element:
-                contenttext = content_element.get_text().replace('\xa0', '').replace('\n', '').replace('\xad', '').replace('      ', '').strip()
-            else:
-                contenttext = ''
+    for page in data_list:
+        urla = page['URL']
+        async with session.get(urla) as response:
+            html = await response.text()
+        page_soup = BeautifulSoup(html, 'lxml')
 
-            times_str = (page_soup.find("time", class_="article-meta__date"))["datetime"]
+        for element in page_soup.find_all('div', class_='box-paywall'):
+            element.decompose()
+        
+        content_element = page_soup.find("div", class_="article-boxes-list article__boxes")
+        if content_element:
+            contenttext = content_element.get_text().replace('\xa0', '').replace('\n', '').replace('\xad', '').replace('      ', '').strip()
+        else:
+            contenttext = ''
 
-            timestamp = datetime.fromisoformat(times_str)
+        times_str = (page_soup.find("time", class_="article-meta__date"))["datetime"]
 
-            page['Content'] = contenttext
+        timestamp = datetime.fromisoformat(times_str)
 
-            page['TimeStamp'] = timestamp
+        page['Content'] = contenttext
+
+        page['TimeStamp'] = timestamp
 
     return data_list
  
@@ -163,11 +162,12 @@ async def send_message(count_b4_parsing, count_after_parsing):
 
 async def main():
     while True:
-        data_list = await scrape_data(url)
-        data_list = await scrap_scrap(data_list)
-        count_b4_parsing, count_after_parsing = await database(data_list)
-        await send_message(count_b4_parsing, count_after_parsing) 
-        await asyncio.sleep(86400) 
+        async with aiohttp.ClientSession() as session:
+            data_list = await scrape_data(session ,url)
+            data_list = await scrap_scrap(session,data_list)
+            count_b4_parsing, count_after_parsing = await database(data_list)
+            await send_message(count_b4_parsing, count_after_parsing) 
+            await asyncio.sleep(86400) 
 
 if __name__ == '__main__':
     asyncio.run(main())
