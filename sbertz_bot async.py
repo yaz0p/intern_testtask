@@ -17,13 +17,6 @@ bot = telegram.Bot(token=TOKEN)
 
 chat_id = '773661341'
 
-headers = requests.utils.default_headers()
-headers.update(
-    {
-        'User-Agent': ua.random,
-    }
-)
-
 url = "https://www.vedomosti.ru/rubrics/economics"
 
 base_url = "https://www.vedomosti.ru"
