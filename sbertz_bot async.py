@@ -1,15 +1,16 @@
 import requests
-from bs4 import BeautifulSoup
-from fake_useragent import UserAgent
-from datetime import datetime
-from psycopg2 import sql
 import psycopg2
 import telegram
 import asyncio
 import aiohttp
+from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
+from datetime import datetime
+from psycopg2 import sql
 
-# Парсер
 ua = UserAgent()
+
+time_to_sleep = 86400
 
 TOKEN = '6234596308:AAHVM9iuVhOdL2LQbqjK9-lWNKApUjnlo8w'
 
@@ -17,19 +18,20 @@ bot = telegram.Bot(token=TOKEN)
 
 chat_id = '773661341'
 
-url = "https://www.vedomosti.ru/rubrics/economics"
+url = 'https://www.vedomosti.ru/rubrics/economics'
 
-base_url = "https://www.vedomosti.ru"
+base_url = 'https://www.vedomosti.ru'
 
 data_list = []
 
+# парсер
 async def scrape_data(session,url):
     async with session.get(url) as response:
         html = await response.text()
 
-    soup = BeautifulSoup(html, "lxml")
+    soup = BeautifulSoup(html, 'lxml')
 
-    # фильтрация бесполезной информации
+# фильтрация
     for element in soup.find_all('div', class_='card-infoblock__title'):
         element.decompose()
 
@@ -47,28 +49,25 @@ async def scrape_data(session,url):
 
     info = soup.find_all('a', attrs={'data-vr-title': True, 'href': True})
 
-    # блок с обычной информацией
-
+# блок с обычной информацией
     for element in info:
         data_vr_title = element['data-vr-title']
         href = element['href']
 
         data_list.append({'Title': data_vr_title, 'URL': base_url + href})
 
-    # конечный блок с отдельным тегом зачем-то
-
-    cards = soup.find_all("div", class_="card-news__article")
+# блок с отдельным тегом
+    cards = soup.find_all('div', class_='card-news__article')
 
     for element in cards:
-        text = element.find("a").text.strip()
-        href = element.find("a")["href"]
+        text = element.find('a').text.strip()
+        href = element.find('a')['href']
         
         data_list.append({'Title': text, 'URL': base_url + href})
 
     return data_list
 
-    # парсинг информации по спаршенным адресам
-
+# парсинг информации по спаршенным адресам
 async def scrap_scrap(session,data_list):
     for page in data_list:
         urla = page['URL']
@@ -79,13 +78,13 @@ async def scrap_scrap(session,data_list):
         for element in page_soup.find_all('div', class_='box-paywall'):
             element.decompose()
         
-        content_element = page_soup.find("div", class_="article-boxes-list article__boxes")
+        content_element = page_soup.find('div', class_='article-boxes-list article__boxes')
         if content_element:
             contenttext = content_element.get_text().replace('\xa0', '').replace('\n', '').replace('\xad', '').replace('      ', '').strip()
         else:
             contenttext = ''
 
-        times_str = (page_soup.find("time", class_="article-meta__date"))["datetime"]
+        times_str = (page_soup.find('time', class_='article-meta__date'))['datetime']
 
         timestamp = datetime.fromisoformat(times_str)
 
@@ -95,21 +94,21 @@ async def scrap_scrap(session,data_list):
 
     return data_list
  
-# РАБОТА С БД 
+# работа с бд 
 async def database(data_list):
     conn = psycopg2.connect(
-        dbname="postgres", 
-        user="postgres", 
-        password="12",    
-        host="localhost"  
+        dbname='postgres', 
+        user='postgres', 
+        password='12',    
+        host='localhost'  
     )
 
     cur = conn.cursor()
 
-    # Создание таблицы если отсутствует
-    table_name = "tz"
+# создание таблицы если отсутствует
+    table_name = 'tz'
     
-    create_table_query = sql.SQL("""
+    create_table_query = sql.SQL('''
         CREATE TABLE IF NOT EXISTS {} (
             ID INT PRIMARY KEY DEFAULT {},
             URL VARCHAR(200) UNIQUE,
@@ -117,14 +116,14 @@ async def database(data_list):
             CONTENT TEXT,
             CREATED_AT TIMESTAMP
         )
-    """).format(sql.Identifier(table_name), sql.Literal(0))
+    ''').format(sql.Identifier(table_name), sql.Literal(0))
 
     cur.execute(create_table_query)
 
     conn.commit()
 
-    count_b4_parsing_query = sql.SQL("""SELECT COUNT(*) FROM {}
-            """).format(sql.Identifier(table_name))
+    count_b4_parsing_query = sql.SQL('''SELECT COUNT(*) FROM {}
+            ''').format(sql.Identifier(table_name))
 
     cur.execute(count_b4_parsing_query)
 
@@ -136,7 +135,7 @@ async def database(data_list):
         content = page['Content']
         timestamp = page['TimeStamp']
 
-        get_max_id_query = sql.SQL("SELECT MAX(ID) FROM {};").format(sql.Identifier(table_name))
+        get_max_id_query = sql.SQL('SELECT MAX(ID) FROM {};').format(sql.Identifier(table_name))
         cur.execute(get_max_id_query)
         max_id = cur.fetchone()[0]
 
@@ -145,17 +144,17 @@ async def database(data_list):
         else:
             id_for_new_row = 1
 
-        insert_query = sql.SQL("""
+        insert_query = sql.SQL('''
             INSERT INTO {} (ID, URL, TITLE, CONTENT, CREATED_AT)
             VALUES (%s, %s, %s, %s, %s)
             ON CONFLICT (URL) DO NOTHING;
-        """).format(sql.Identifier(table_name))
+        ''').format(sql.Identifier(table_name))
 
         cur.execute(insert_query, (id_for_new_row, urla, title, content, timestamp))
         conn.commit()
 
-    count_after_parsing_query = sql.SQL("""SELECT COUNT(*) FROM {}
-            """).format(sql.Identifier(table_name))
+    count_after_parsing_query = sql.SQL('''SELECT COUNT(*) FROM {}
+            ''').format(sql.Identifier(table_name))
 
     cur.execute(count_after_parsing_query)
 
@@ -176,7 +175,7 @@ async def main():
             data_list = await scrap_scrap(session,data_list)
             count_b4_parsing, count_after_parsing = await database(data_list)
             await send_message(count_b4_parsing, count_after_parsing) 
-            await asyncio.sleep(86400) 
+            await asyncio.sleep(time_to_sleep) 
 
 if __name__ == '__main__':
     asyncio.run(main())
