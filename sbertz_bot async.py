@@ -1,20 +1,16 @@
-import requests
 import psycopg2
 import telegram
 import asyncio
 import aiohttp
 from bs4 import BeautifulSoup
-from fake_useragent import UserAgent
 from datetime import datetime
 from psycopg2 import sql
 
-ua = UserAgent()
-
 time_to_sleep = 86400
 
-TOKEN = '6234596308:AAHVM9iuVhOdL2LQbqjK9-lWNKApUjnlo8w'
+token = '6234596308:AAHVM9iuVhOdL2LQbqjK9-lWNKApUjnlo8w'
 
-bot = telegram.Bot(token=TOKEN)
+bot = telegram.Bot(token=token)
 
 chat_id = '773661341'
 
